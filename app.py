@@ -1,19 +1,4 @@
 import streamlit as st
-
-# ==========================================
-# ⚡️ NUKLEÁRNÍ OPRAVA PRO KRESLENÍ (PATCH) ⚡️
-# ==========================================
-import streamlit.elements.image as st_image
-import streamlit.runtime.media_file_storage as mfs
-
-def patched_image_to_url(data, width, height, clamp, channels, output_format, image_id):
-    # Tohle je moderní způsob, jak Streamlit ukládá fotky
-    return st.runtime.media_file_storage.get_instance().add(data, output_format, image_id)
-
-# Vnutíme tuhle funkci tam, kde ji kreslicí nástroj hledá
-st_image.image_to_url = patched_image_to_url
-# ==========================================
-
 import io
 import requests
 import base64
@@ -21,27 +6,25 @@ import time
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
-
 # --- DESIGN ---
+st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;700&display=swap');
     body, .stApp { background-color: white !important; color: #1a1c22 !important; font-family: 'Sora', sans-serif !important; }
-    div.stButton > button { width: 100% !important; height: 3.5em; background-color: #00c853 !important; color: white !important; font-weight: 700 !important; border: none !important; border-radius: 12px !important; }
+    div.stButton > button { width: 100% !important; height: 3.5em; background-color: #00c853 !important; color: white !important; font-weight: 700 !important; border-radius: 12px !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN ---
+# --- TOKEN (Hledáme v Secrets) ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
 with st.sidebar:
     st.header("🎨 Vzor")
     texture_file = st.file_uploader("Nahraj vzor (omítka/dřevo):", type=["jpg", "png", "jpeg"])
 
-# --- HLAVNÍ PLOCHA ---
 bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"])
 
 if bg_file:
@@ -51,9 +34,7 @@ if bg_file:
     new_size = (int(w*ratio), int(h*ratio))
     img_res = img.resize(new_size)
 
-    st.write("🖍️ 2. Zamaluj plochu:")
-    
-    # Používáme pevný klíč 'FIXED_CANVAS'
+    st.write("🖍️ 2. Zamaluj plochu pro změnu:")
     canvas_result = st_canvas(
         fill_color="rgba(0, 200, 83, 0.3)",
         stroke_width=20,
@@ -61,7 +42,7 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="FIXED_CANVAS",
+        key="canvas_v3_11",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
@@ -86,7 +67,7 @@ if bg_file:
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            "prompt": "Highly detailed house facade, professional architecture, apply texture",
+                            "prompt": "Highly detailed house facade, professional architecture, apply texture from reference",
                             "image_reference": pil_to_b64(text_img),
                         }
                     }
