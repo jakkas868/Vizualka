@@ -14,9 +14,28 @@ if not hasattr(st_image, 'image_to_url'):
         return get_instance().add(data, output_format, image_id)
     st_image.image_to_url = image_to_url
 
-# --- ZÁKLADNÍ NASTAVENÍ ---
+# --- DESIGN A CENTROVÁNÍ (CSS) ---
 st.set_page_config(page_title="Vizualka Pro", layout="centered")
-st.markdown("<style>.stApp { background-color: white; color: black; }</style>", unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    .stApp { background-color: white; color: black; }
+    /* Centruje kreslicí plochu a přidává rámeček */
+    .stCanvas {
+        border: 2px solid #d1d1d1 !important;
+        margin: 0 auto !important;
+        display: block;
+    }
+    /* Centrování sloupců a textu */
+    div[data-testid="column"] {
+        display: flex;
+        justify-content: center;
+        text-align: center;
+    }
+    .stFileUploader { width: 90% !important; margin: 0 auto !important; }
+    h1, h3, p { text-align: center; color: black !important; font-family: sans-serif; }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🏠 Vizualka.cz Pro")
 
@@ -24,14 +43,16 @@ st.title("🏠 Vizualka.cz Pro")
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
 # --- NAHRÁVÁNÍ ---
-bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"], key="house_loader")
-texture_file = st.file_uploader("🎨 2. Nahraj vzor/texturu:", type=["jpg", "png", "jpeg"], key="tex_loader")
+bg_file = st.file_uploader("📸 1. Nahrajte fotku DOMU:", type=["jpg", "png", "jpeg"], key="h_up")
+texture_file = st.file_uploader("🎨 2. Nahrajte fotku VZORU:", type=["jpg", "png", "jpeg"], key="t_up")
 
 if bg_file and texture_file:
-    # Zpracování a zmenšení fotky (600px je jistota, aby to mobil utáhl)
+    # Zpracování fotky domu
     img_pil = Image.open(bg_file).convert("RGB")
     w, h = img_pil.size
-    max_dim = 600 
+    
+    # ZMENŠENÍ PRO MOBIL (šířka 500px je jistota, aby nic neutíkalo doprava)
+    max_dim = 500 
     if w > h:
         new_w, new_h = max_dim, int(h * (max_dim / w))
     else:
@@ -39,22 +60,24 @@ if bg_file and texture_file:
     img_res = img_pil.resize((new_w, new_h))
 
     st.markdown("---")
-    st.write("🖍️ **3. Zamaluj plochu pro změnu:**")
+    st.write("### 🖍️ 3. Zamalujte plochu pro změnu:")
+    st.caption("Kreslete uvnitř šedého rámečku.")
 
-    # Kreslicí plocha s unikátním klíčem podle času (vynutí zobrazení fotky!)
+    # Kreslicí plocha vycentrovaná
     canvas_result = st_canvas(
         fill_color="rgba(0, 200, 83, 0.3)",
-        stroke_width=12,
+        stroke_width=10,
         background_image=img_res,
         height=new_h,
         width=new_w,
         drawing_mode="freedraw",
-        key=f"canvas_{int(time.time())}", 
+        key=f"canvas_final_cz_{bg_file.name}",
     )
 
-    if st.button("🚀 4. VIZUALIZOVAT", use_container_width=True):
+    st.write("---")
+    if st.button("🚀 4. SPUSTIT VIZUALIZACI", use_container_width=True):
         if not api_token:
-            st.error("Chybí Token!")
+            st.error("⚠️ Chybí API Token! Vložte ho vlevo nebo do Secrets.")
         elif canvas_result.image_data is not None:
             with st.spinner("🤖 AI pracuje..."):
                 try:
@@ -71,7 +94,7 @@ if bg_file and texture_file:
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            "prompt": "highly realistic architectural photography, apply texture to facade",
+                            "prompt": "Highly realistic architectural photography, apply the texture to the house facade perfectly",
                             "image_reference": pil_to_b64(Image.open(texture_file).convert("RGB")),
                         }
                     }
@@ -81,12 +104,9 @@ if bg_file and texture_file:
                     
                     if "urls" in data:
                         poll_url = data["urls"]["get"]
-                        # Čekání na výsledek (max 40s)
-                        for _ in range(20):
+                        while data["status"] not in ["succeeded", "failed"]:
                             time.sleep(2)
                             data = requests.get(poll_url, headers=headers).json()
-                            if data["status"] in ["succeeded", "failed"]:
-                                break
                         
                         if data["status"] == "succeeded":
                             st.markdown("---")
@@ -94,8 +114,6 @@ if bg_file and texture_file:
                             st.image(data["output"][0], use_container_width=True)
                             st.success("Hotovo! 🔥")
                         else:
-                            st.error(f"AI selhala: {data.get('status')}")
-                    else:
-                        st.error(f"Chyba API: {data.get('detail')}")
+                            st.error("AI se nepodařilo výsledek vygenerovat.")
                 except Exception as e:
                     st.error(f"Chyba: {e}")
