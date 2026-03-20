@@ -6,95 +6,104 @@ import time
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# ==================================================
-# ⚡️ PATCH PRO STABILITU KRESLENÍ (STREAMLIT 1.28) ⚡️
-# ==================================================
+# --- OPRAVA CHYBY KRESLENÍ (PATCH PRO STARŠÍ STREAMLIT) ---
 import streamlit.elements.image as st_image
 if not hasattr(st_image, 'image_to_url'):
     from streamlit.runtime.media_file_storage import get_instance
     def image_to_url(data, width, height, clamp, channels, output_format, image_id):
         return get_instance().add(data, output_format, image_id)
     st_image.image_to_url = image_to_url
-# ==================================================
+# --------------------------------------------------------
 
 # --- NASTAVENÍ STRÁNKY ---
 st.set_page_config(page_title="Vizualka.cz Pro", layout="wide")
 
-# Čistý bílý design a centrování prvků
+# --- DESIGN A CENTROVÁNÍ (CSS) ---
 st.markdown("""
     <style>
     body, .stApp { background-color: white !important; color: black !important; font-family: sans-serif; }
-    h1 { color: #1a1c22 !important; text-align: center; }
-    div[data-testid="stBlock"] { text-align: center; }
-    /* Centrování nahrávače souborů */
-    .stFileUploader { width: 60% !important; margin: 0 auto !important; }
+    h1, h2, h3, h4, h5, h6 { color: #1a1c22 !important; text-align: center; }
+    p, span, div.stMarkdown, div.stText, div.stCaption { color: black !important; text-align: center; }
+    
+    /* Centrování nahrávače souborů a tlačítek */
+    .stFileUploader, div.stButton {
+        width: 100% !important;
+        max-width: 600px;
+        margin: 1.5em auto !important;
+        display: block !important;
+    }
+    
+    /* Zelený design pro tlačítko */
+    div.stButton > button {
+        width: 100% !important;
+        height: 3.5em;
+        background-color: #00c853 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border-radius: 12px !important;
+        border: none !important;
+        display: block;
+        margin: 0 auto;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🏠 Vizualka.cz Pro")
-st.write("---")
+st.write("Profesionální vizualizace fasády")
 
-# Token ze Secrets
+# --- TOKEN (Z Secrets) ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
-# --- KROK 1: NAHRÁVÁNÍ (Vycentrované) ---
-col_u1, col_u2 = st.columns(2)
-with col_u1:
-    st.markdown("### 📸 Nahrajte fotku DOMU")
-    bg_file = st.file_uploader("Vyberte dům:", type=["jpg", "png", "jpeg"], key="dom_upload")
-with col_u2:
-    st.markdown("### 🎨 Nahrajte fotku VZORU")
-    texture_file = st.file_uploader("Vyberte vzor:", type=["jpg", "png", "jpeg"], key="vzor_upload")
+# --- NAHRÁVÁNÍ (Uprostřed stránky) ---
+st.markdown("---")
+col_upload1, col_upload2 = st.columns(2)
+
+with col_upload1:
+    bg_file = st.file_uploader("📸 Nahrajte fotku DOMU (Hlavní fotka)", type=["jpg", "png", "jpeg"], key="main_dom_upload")
+
+with col_upload2:
+    texture_file = st.file_uploader("🎨 Nahrajte fotku VZORU (Textury, omítky, obkladu)", type=["jpg", "png", "jpeg"], key="texture_upload")
 
 if bg_file and texture_file:
-    # Načtení fotky a optimalizace pro kreslení
-    img_pil = Image.open(bg_file).convert("RGB")
-    w, h = img_pil.size
-    # Zvýšena maximální dimenze na 900px pro lepší detail
-    max_dim = 900
+    # --- PŘÍPRAVA FOTKY DOMU ---
+    img = Image.open(bg_file).convert("RGB")
+    w, h = img.size
+    # Optimalizace velikosti pro kreslení (max 800px pro lepší detail)
+    max_dim = 800
     if w > h:
         new_w, new_h = max_dim, int(h * (max_dim / w))
     else:
         new_w, new_h = int(w * (max_dim / h)), max_dim
-    
-    img_res = img_pil.resize((new_w, new_h))
+    img_res = img.resize((new_w, new_h))
 
+    # --- KRESLENÍ (Vycentrované) ---
     st.markdown("---")
-    st.markdown("### 🖍️ Zamalujte plochu pro změnu (např. fasádu):")
-    st.info("Zkuste obtáhnout kontury fasády, AI se postará o zbytek. Pokud dům nevidíte, obnovte stránku (Refresh).")
-
-    # --- KROK 2: KRESLENÍ (Profi Centrování) ---
-    col_c1, col_c2, col_c3 = st.columns([1, 10, 1]) # Široký středový sloupec
+    st.markdown("### 🖍️ Zamalujte na fotce plochu, kterou chcete změnit:")
+    st.info("Obnovte stránku (Refresh), pokud dům nevidíte.")
     
+    # Vycentrování kreslení
+    col_c1, col_c2, col_c3 = st.columns([1, 10, 1])
     with col_c2:
-        # Kreslicí plocha s JEMNĚJŠÍ ČÁROU a NOVÝM KLÍČEM
+        # Kreslicí plocha s JEMNĚJŠÍ ČÁROU
         canvas_result = st_canvas(
-            fill_color="rgba(0, 200, 83, 0.3)", # Průhledná zelená pro masku
-            stroke_width=12, # 🔥 JEMNĚJŠÍ ŠTĚTEC (z 25 na 12) 🔥
+            fill_color="rgba(0, 200, 83, 0.3)",
+            stroke_width=10, # 🔥 JEMNĚJŠÍ ŠTĚTEC (bylo 25) 🔥
             background_image=img_res, 
             height=new_h,
             width=new_w,
             drawing_mode="freedraw",
-            key="canvas_clean_design_v2", # Nový key vynutí reset po změně designu
+            # 🔥 UNIKÁTNÍ KLÍČ, KTERÝ RESETUJE KRESLENÍ PŘI ZMĚNĚ FOTKY 🔥
+            key=f"pro_canvas_vFinal_{bg_file.name}",
         )
 
-    st.markdown("---")
-    
-    # --- KROK 3: VIZUALIZACE (Vycentrované tlačítko) ---
-    col_b1, col_b2, col_b3 = st.columns([2, 2, 2])
-    with col_b2:
-        visualize_btn = st.button("🚀 SPUSTIT VIZUALIZACI")
+    # --- TLAČÍTKO VIZUALIZOVAT ---
+    visualize_btn = st.button("🚀 VIZUALIZOVAT OZNAČENÉ")
 
     if visualize_btn:
         if not api_token:
             st.error("⚠️ Chybí API Token! Vložte ho v levém menu.")
-        elif not texture_file:
-            st.error("⚠️ Nejdřív nahrajte vzor!")
         elif canvas_result.image_data is not None:
-            # Kontrola, zda uživatel vůbec kreslil
-            # canvas_result.image_data.shape[2] je 4 (RGBA)
-            
-            with st.spinner("🤖 AI nanáší vzor na dům... (může to trvat až 30 sekund)"):
+            with st.spinner("🤖 AI nanáší vzor... (může to trvat 20-30 sekund)"):
                 try:
                     # Funkce pro Base64
                     def pil_to_b64(pil_img):
@@ -105,17 +114,15 @@ if bg_file and texture_file:
                     mask_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                     text_img = Image.open(texture_file).convert("RGB")
                     
-                    # API volání Replicate (Model Inpainting)
+                    # API volání Replicate
                     headers = {"Authorization": f"Token {api_token}", "Content-Type": "application/json"}
                     payload = {
                         "version": "95b7223184cc756c70b992010d24213030ca5734e1d4d627a061fac313f81537",
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            # Prompt pro přesné nanášení textury
-                            "prompt": "Apply the style and texture from the reference image to the masked area, architectural photo, highly detailed, photorealistic facade",
+                            "prompt": "change the facade of the house to this exact texture, highly realistic architectural photography",
                             "image_reference": pil_to_b64(text_img),
-                            "num_outputs": 1
                         }
                     }
 
@@ -124,7 +131,7 @@ if bg_file and texture_file:
                     
                     if "urls" in data:
                         poll_url = data["urls"]["get"]
-                        # Čekání na výsledek (polling)
+                        # Čekání na výsledek
                         while data["status"] not in ["succeeded", "failed"]:
                             time.sleep(2)
                             data = requests.get(poll_url, headers=headers).json()
@@ -132,15 +139,9 @@ if bg_file and texture_file:
                         if data["status"] == "succeeded":
                             st.markdown("---")
                             st.subheader("✨ Výsledek:")
-                            # Výsledek vycentrovaný
                             st.image(data["output"][0], use_container_width=True)
-                            st.success("Hotovo! Vizualizace je na světě. 🔥")
+                            st.success("Hotovo! 🔥")
                         else:
-                            st.error("AI se nepodařilo obrázek vygenerovat, zkuste to znovu.")
+                            st.error("AI se nepodařilo obrázek vytvořit.")
                 except Exception as e:
-                    st.error(f"Něco se pokazilo: {e}")
-else:
-    st.info("Nahrajte fotku domu i vzoru a zobrazí se kreslicí plocha.")
-
-st.markdown("---")
-st.caption("© 2026 Vizualka.cz | Pro verze 1.1")
+                    st.error(f"Chyba: {e}")
