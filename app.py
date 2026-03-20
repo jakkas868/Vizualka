@@ -6,25 +6,29 @@ import time
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# --- DESIGN ---
+# --- NASTAVENÍ ---
 st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;700&display=swap');
-    body, .stApp { background-color: white !important; color: #1a1c22 !important; font-family: 'Sora', sans-serif !important; }
-    div.stButton > button { width: 100% !important; height: 3.5em; background-color: #00c853 !important; color: white !important; font-weight: 700 !important; border-radius: 12px !important; border: none !important; }
-    </style>
-    """, unsafe_allow_html=True)
 
+# --- OPRAVA CHYBY KRESLENÍ (PATCH) ---
+import streamlit.elements.image as st_image
+if not hasattr(st_image, 'image_to_url'):
+    def image_to_url(data, width, height, clamp, channels, output_format, image_id):
+        return st.runtime.media_file_storage.get_instance().add(data, output_format, image_id)
+    st_image.image_to_url = image_to_url
+
+# --- ČISTÝ DESIGN ---
+st.markdown("<style>body, .stApp { background-color: white !important; color: black !important; font-family: sans-serif; }</style>", unsafe_allow_html=True)
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN (Hledáme v Secrets) ---
+# --- TOKEN (Z Secrets) ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
+# --- BOČNÍ MENU ---
 with st.sidebar:
     st.header("🎨 Vzor")
     texture_file = st.file_uploader("Nahraj vzor (omítka/dřevo):", type=["jpg", "png", "jpeg"])
 
+# --- NAHRÁNÍ FOTKY DOMU ---
 bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"])
 
 if bg_file:
@@ -42,14 +46,14 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="canvas_v3_11",
+        key="canvas_v2026",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
         if not api_token:
-            st.error("Chybí Token!")
+            st.error("Chybí Token v nastavení (Secrets)!")
         elif not texture_file:
-            st.error("Nahrajte vzor vlevo!")
+            st.error("Nahraj nejdřív vzor vlevo v menu!")
         elif canvas_result.image_data is not None:
             with st.spinner("🤖 AI pracuje..."):
                 try:
@@ -67,7 +71,7 @@ if bg_file:
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            "prompt": "Highly detailed house facade, professional architecture, apply texture from reference",
+                            "prompt": "Highly detailed house facade, applying the exact texture from the reference image, hyperrealistic architectural photography",
                             "image_reference": pil_to_b64(text_img),
                         }
                     }
@@ -84,7 +88,6 @@ if bg_file:
                         if data["status"] == "succeeded":
                             st.subheader("✨ Výsledek:")
                             st.image(data["output"][0], use_container_width=True)
-                        else:
-                            st.error("AI selhala.")
+                            st.success("Vizualizace hotova! 🔥")
                 except Exception as e:
-                    st.error(f"Chyba: {e}")
+                    st.error(f"Chyba při volání AI: {e}")
