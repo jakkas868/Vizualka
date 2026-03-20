@@ -1,7 +1,6 @@
 import streamlit as st
 
-# --- TADY JE TEN OPRAVNÝ PODFUK (Monkey Patch) ---
-# Tato část opravuje chybu "module 'streamlit.elements.image' has no attribute 'image_to_url'"
+# --- OPRAVA PRO KRESLICÍ PLOCHU (Monkey Patch) ---
 import streamlit.elements.image as st_image
 if not hasattr(st_image, 'image_to_url'):
     def image_to_url(data, width, height, clamp, channels, output_format, image_id):
@@ -10,13 +9,12 @@ if not hasattr(st_image, 'image_to_url'):
     st_image.image_to_url = image_to_url
 # ------------------------------------------------
 
-import replicate
-from PIL import Image
-from streamlit_drawable_canvas import st_canvas
 import io
 import requests
 import base64
 import time
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
 
 # --- DESIGN ---
 st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
@@ -31,7 +29,7 @@ st.markdown("""
 
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN (Ze Secrets) ---
+# --- TOKEN ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token (r8_...):", type="password")
 
 with st.sidebar:
@@ -56,7 +54,7 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="vizualka_v2026_final",
+        key="vizualka_v2026_clean",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
@@ -67,6 +65,7 @@ if bg_file:
         elif canvas_result.image_data is not None:
             with st.spinner("🤖 AI pracuje..."):
                 try:
+                    # Funkce pro Base64
                     def pil_to_b64(pil_img):
                         buf = io.BytesIO()
                         pil_img.save(buf, format="PNG")
@@ -75,6 +74,7 @@ if bg_file:
                     mask_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                     text_img = Image.open(texture_file).convert("RGB")
                     
+                    # Přímé volání Replicate přes API (nepotřebujeme tu rozbitou knihovnu)
                     headers = {"Authorization": f"Token {api_token}", "Content-Type": "application/json"}
                     payload = {
                         "version": "95b7223184cc756c70b992010d24213030ca5734e1d4d627a061fac313f81537",
@@ -89,14 +89,17 @@ if bg_file:
                     resp = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload)
                     prediction = resp.json()
                     
-                    poll_url = prediction["urls"]["get"]
-                    while prediction["status"] not in ["succeeded", "failed"]:
-                        time.sleep(2)
-                        prediction = requests.get(poll_url, headers=headers).json()
+                    if "urls" not in prediction:
+                        st.error(f"Chyba API: {prediction.get('detail', 'Neznámá chyba')}")
+                    else:
+                        poll_url = prediction["urls"]["get"]
+                        while prediction["status"] not in ["succeeded", "failed"]:
+                            time.sleep(2)
+                            prediction = requests.get(poll_url, headers=headers).json()
 
-                    if prediction["status"] == "succeeded":
-                        st.subheader("✨ Výsledek:")
-                        st.image(prediction["output"][0], use_container_width=True)
-                        st.success("Hotovo! 🔥")
+                        if prediction["status"] == "succeeded":
+                            st.subheader("✨ Výsledek:")
+                            st.image(prediction["output"][0], use_container_width=True)
+                            st.success("Hotovo! 🔥")
                 except Exception as e:
                     st.error(f"Chyba: {e}")
