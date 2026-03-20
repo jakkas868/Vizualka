@@ -22,40 +22,37 @@ st.title("🏠 Vizualka.cz Pro")
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
 # --- NAHRÁVÁNÍ ---
-bg_file = st.file_uploader("📸 1. Nahraj dům:", type=["jpg", "png", "jpeg"])
-texture_file = st.file_uploader("🎨 2. Nahraj vzor:", type=["jpg", "png", "jpeg"])
+bg_file = st.file_uploader("📸 1. Nahrajte fotku domu:", type=["jpg", "png", "jpeg"], key="h_up")
+texture_file = st.file_uploader("🎨 2. Nahrajte fotku vzoru:", type=["jpg", "png", "jpeg"], key="t_up")
 
 if bg_file and texture_file:
-    # 1. Zpracování a zmenšení (důležité pro rychlost na mobilu)
+    # Načtení a zmenšení fotky
     img_pil = Image.open(bg_file).convert("RGB")
     w, h = img_pil.size
+    
+    # Menší rozlišení pro absolutní stabilitu na mobilu
     max_dim = 500 
-    new_w, new_h = (max_dim, int(h * (max_dim / w))) if w > h else (int(w * (max_dim / h)), max_dim)
+    if w > h:
+        new_w, new_h = max_dim, int(h * (max_dim / w))
+    else:
+        new_w, new_h = int(w * (max_dim / h)), max_dim
     img_res = img_pil.resize((new_w, new_h))
 
-    # 🔥 KLÍČOVÝ FIX: Převedeme obrázek na text (Base64) 🔥
-    # Tohle zajistí, že prohlížeč obrázek uvidí a nezobrazí tmu
-    buffered = io.BytesIO()
-    img_res.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
-    bg_data_url = f"data:image/png;base64,{img_str}"
-
     st.markdown("---")
-    st.write("### 🖍️ 3. Zamaluj plochu:")
+    st.write("### 🖍️ 3. Zamalujte plochu pro změnu:")
 
-    # Kreslicí plocha s vynuceným pozadím
+    # Kreslicí plocha - teď posíláme přímo img_res
     canvas_result = st_canvas(
         fill_color="rgba(0, 200, 83, 0.3)",
         stroke_width=10,
-        background_image=bg_data_url, # Používáme zakódovaný obrázek
+        background_image=img_res, # TADY JE TA OPRAVA
         height=new_h,
         width=new_w,
         drawing_mode="freedraw",
-        key=f"canvas_{bg_file.name}", # Unikátní klíč pro reset
+        key=f"canvas_v311_{bg_file.name}", 
     )
 
-    # --- TLAČÍTKO ---
-    if st.button("🚀 SPUSTIT VIZUALIZACI", use_container_width=True):
+    if st.button("🚀 4. SPUSTIT VIZUALIZACI", use_container_width=True):
         if not api_token:
             st.error("Chybí Token!")
         elif canvas_result.image_data is not None:
