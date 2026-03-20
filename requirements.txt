@@ -1,5 +1,6 @@
-streamlit
-replicate
+streamlit==1.31.0
+replicate==0.22.0
 Pillow
 requests
-streamlit-drawable-canvas
+streamlit-drawable-canvas==0.9.3
+pydantic==1.10.12
