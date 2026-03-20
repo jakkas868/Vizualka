@@ -1,4 +1,20 @@
 import streamlit as st
+
+# ==========================================
+# ⚡️ SUPER-PATCH: OPRAVA CHYBY KRESLENÍ ⚡️
+# ==========================================
+try:
+    import streamlit.elements.image as st_image
+    def universal_image_to_url(data, width, height, clamp, channels, output_format, image_id):
+        from streamlit.runtime.media_file_storage import get_instance
+        return get_instance().add(data, output_format, image_id)
+    
+    # Vnutíme to Streamlitu natvrdo
+    st_image.image_to_url = universal_image_to_url
+except Exception:
+    pass
+# ==========================================
+
 import io
 import requests
 import base64
@@ -6,29 +22,21 @@ import time
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# --- NASTAVENÍ ---
 st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
 
-# --- OPRAVA CHYBY KRESLENÍ (PATCH) ---
-import streamlit.elements.image as st_image
-if not hasattr(st_image, 'image_to_url'):
-    def image_to_url(data, width, height, clamp, channels, output_format, image_id):
-        return st.runtime.media_file_storage.get_instance().add(data, output_format, image_id)
-    st_image.image_to_url = image_to_url
-
-# --- ČISTÝ DESIGN ---
-st.markdown("<style>body, .stApp { background-color: white !important; color: black !important; font-family: sans-serif; }</style>", unsafe_allow_html=True)
+# --- DESIGN ---
+st.markdown("<style>body, .stApp { background-color: white !important; color: black !important; }</style>", unsafe_allow_html=True)
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN (Z Secrets) ---
+# --- TOKEN ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
 # --- BOČNÍ MENU ---
 with st.sidebar:
-    st.header("🎨 Vzor")
-    texture_file = st.file_uploader("Nahraj vzor (omítka/dřevo):", type=["jpg", "png", "jpeg"])
+    st.header("🎨 Vzor (Textura)")
+    texture_file = st.file_uploader("Nahraj vzor:", type=["jpg", "png", "jpeg"])
 
-# --- NAHRÁNÍ FOTKY DOMU ---
+# --- HLAVNÍ PLOCHA ---
 bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"])
 
 if bg_file:
@@ -39,6 +47,8 @@ if bg_file:
     img_res = img.resize(new_size)
 
     st.write("🖍️ 2. Zamaluj plochu pro změnu:")
+    
+    # Kreslicí plocha s novým klíčem
     canvas_result = st_canvas(
         fill_color="rgba(0, 200, 83, 0.3)",
         stroke_width=20,
@@ -46,14 +56,14 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="canvas_v2026",
+        key="canvas_ultimate_fix",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
         if not api_token:
-            st.error("Chybí Token v nastavení (Secrets)!")
+            st.error("Chybí API Token!")
         elif not texture_file:
-            st.error("Nahraj nejdřív vzor vlevo v menu!")
+            st.error("Chybí vzor vlevo!")
         elif canvas_result.image_data is not None:
             with st.spinner("🤖 AI pracuje..."):
                 try:
@@ -71,7 +81,7 @@ if bg_file:
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            "prompt": "Highly detailed house facade, applying the exact texture from the reference image, hyperrealistic architectural photography",
+                            "prompt": "Apply the exact texture from reference image to the house facade, professional architectural photo",
                             "image_reference": pil_to_b64(text_img),
                         }
                     }
@@ -88,6 +98,6 @@ if bg_file:
                         if data["status"] == "succeeded":
                             st.subheader("✨ Výsledek:")
                             st.image(data["output"][0], use_container_width=True)
-                            st.success("Vizualizace hotova! 🔥")
+                            st.success("Hotovo! 🔥")
                 except Exception as e:
-                    st.error(f"Chyba při volání AI: {e}")
+                    st.error(f"Chyba: {e}")
