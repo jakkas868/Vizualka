@@ -6,7 +6,7 @@ import time
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# --- OPRAVA PRO ZOBRAZENÍ (PATCH PRO PYTHON 3.11) ---
+# --- OPRAVA PRO ZOBRAZENÍ (PATCH PRO 3.11) ---
 import streamlit.elements.image as st_image
 if not hasattr(st_image, 'image_to_url'):
     from streamlit.runtime.media_file_storage import get_instance
@@ -14,69 +14,25 @@ if not hasattr(st_image, 'image_to_url'):
         return get_instance().add(data, output_format, image_id)
     st_image.image_to_url = image_to_url
 
-# --- DESIGN A CENTROVÁNÍ (CSS) ---
+# --- DESIGN ---
 st.set_page_config(page_title="Vizualka Pro", layout="centered")
-
-st.markdown("""
-    <style>
-    .stApp { background-color: white; color: black; font-family: sans-serif; }
-    
-    /* Centruje a přidává rámeček pro kreslicí plochu */
-    .stCanvas {
-        border: 2px solid #d1d1d1 !important;
-        margin: 0 auto !important;
-        display: block !important;
-        box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
-    }
-    
-    /* Centrování sloupců a textu */
-    div[data-testid="column"] {
-        display: flex;
-        justify-content: center;
-        text-align: center;
-    }
-    
-    /* Zelený design pro tlačítko */
-    div.stButton > button {
-        background-color: #00c853 !important;
-        color: white !important;
-        width: 100% !important;
-        max-width: 500px;
-        height: 3.5em;
-        border-radius: 12px;
-        font-weight: bold;
-        display: block;
-        margin: 2em auto !important;
-        border: none;
-    }
-    
-    .stFileUploader { width: 90% !important; margin: 0 auto !important; }
-    h1, h3, p { text-align: center; color: black !important; }
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("<style>.stApp { background-color: white; color: black; } h3 { text-align: center; color: black; }</style>", unsafe_allow_html=True)
 
 st.title("🏠 Vizualka.cz Pro")
-st.write("---")
 
 # Token ze Secrets
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
-# --- KROK 1: NAHRÁVÁNÍ (Vedle sebe) ---
-col_u1, col_u2 = st.columns(2)
-with col_u1:
-    st.markdown("### 📸 Fotka DOMU")
-    bg_file = st.file_uploader("Vyberte dům:", type=["jpg", "png", "jpeg"], key="house_u")
-with col_u2:
-    st.markdown("### 🎨 Fotka VZORU")
-    texture_file = st.file_uploader("Vyberte vzor:", type=["jpg", "png", "jpeg"], key="tex_u")
+# --- NAHRÁVÁNÍ ---
+st.write("---")
+bg_file = st.file_uploader("📸 1. Nahrajte fotku domu:", type=["jpg", "png", "jpeg"], key="house_loader")
+texture_file = st.file_uploader("🎨 2. Nahrajte fotku vzoru:", type=["jpg", "png", "jpeg"], key="tex_loader")
 
 if bg_file and texture_file:
-    # Zpracování fotky domu
+    # Agresivní zmenšení pro stabilitu (400px šířka zajistí, že se to vejde na každý mobil)
     img_pil = Image.open(bg_file).convert("RGB")
     w, h = img_pil.size
-    
-    # 🔥 DYNAMICKÉ ZMENŠENÍ PRO MOBIL (Šířka 450px je jistota, aby nic neutíkalo) 🔥
-    max_dim = 450 
+    max_dim = 400 
     if w > h:
         new_w, new_h = max_dim, int(h * (max_dim / w))
     else:
@@ -84,29 +40,26 @@ if bg_file and texture_file:
     img_res = img_pil.resize((new_w, new_h))
 
     st.markdown("---")
-    st.markdown("### 🖍️ 2. Zamalujte plochu pro změnu:")
-    st.caption("Kreslete jemnou čárou uvnitř šedého rámečku.")
+    st.write("### 🖍️ 3. Zamalujte plochu pro změnu:")
 
-    # --- KROK 2: KRESLENÍ (Vycentrované s rámečkem) ---
-    _, canvas_col, _ = st.columns([1, 10, 1])
-    with canvas_col:
-        # Kreslicí plocha s jemnější čárou a unikátním klíčem
-        canvas_result = st_canvas(
-            fill_color="rgba(0, 200, 83, 0.3)",
-            stroke_width=10, # Jemnější štětec
-            background_image=img_res,
-            height=new_h,
-            width=new_w,
-            drawing_mode="freedraw",
-            key=f"canvas_centered_vFinal_{bg_file.name}", 
-        )
+    # Unikátní klíč key=f"canvas_{bg_file.name}" vynutí zobrazení fotky!
+    canvas_result = st_canvas(
+        fill_color="rgba(0, 200, 83, 0.3)",
+        stroke_width=6, # 🔥 VELMI JEMNÁ ČÁRA 🔥
+        background_image=img_res,
+        height=new_h,
+        width=new_w,
+        drawing_mode="freedraw",
+        key=f"canvas_v311_{bg_file.name}", 
+    )
 
-    # --- KROK 3: VIZUALIZACE ---
-    if st.button("🚀 SPUSTIT VIZUALIZACI"):
+    # --- TLAČÍTKO ---
+    st.write("---")
+    if st.button("🚀 4. SPUSTIT VIZUALIZACI", use_container_width=True):
         if not api_token:
-            st.error("⚠️ Chybí Token! Vložte ho v Secrets.")
+            st.error("Chybí Token v nastavení!")
         elif canvas_result.image_data is not None:
-            with st.spinner("🤖 AI pracuje... (může to trvat 20-30 sekund)"):
+            with st.spinner("🤖 AI pracuje..."):
                 try:
                     def pil_to_b64(pil_img):
                         buf = io.BytesIO()
@@ -121,7 +74,7 @@ if bg_file and texture_file:
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            "prompt": "Highly realistic architectural photography, apply the texture to the house facade perfectly",
+                            "prompt": "Highly realistic architectural photography, apply texture to the house facade",
                             "image_reference": pil_to_b64(Image.open(texture_file).convert("RGB")),
                         }
                     }
@@ -136,12 +89,8 @@ if bg_file and texture_file:
                             data = requests.get(poll_url, headers=headers).json()
                         
                         if data["status"] == "succeeded":
-                            st.markdown("---")
                             st.subheader("✨ Výsledek:")
-                            # Výsledek vycentrovaný na celou šířku
                             st.image(data["output"][0], use_container_width=True)
                             st.success("Hotovo! 🔥")
-                        else:
-                            st.error("AI se nepodařilo výsledek vygenerovat.")
                 except Exception as e:
                     st.error(f"Chyba: {e}")
