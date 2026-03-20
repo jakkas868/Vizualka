@@ -1,0 +1,5 @@
+streamlit
+replicate
+Pillow
+requests
+streamlit-drawable-canvas
