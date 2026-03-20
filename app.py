@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# --- FIX PRO ZOBRAZENÍ (STREAMLIT 1.28 + PYTHON 3.11) ---
+# --- FIX PRO ZOBRAZENÍ ---
 import streamlit.elements.image as st_image
 if not hasattr(st_image, 'image_to_url'):
     from streamlit.runtime.media_file_storage import get_instance
@@ -20,34 +20,28 @@ st.title("🏠 Vizualka.cz Pro")
 
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token:", type="password")
 
-# --- NAHRÁVÁNÍ ---
 bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"], key="h_up")
 texture_file = st.file_uploader("🎨 2. Nahraj vzor:", type=["jpg", "png", "jpeg"], key="t_up")
 
 if bg_file and texture_file:
     img_pil = Image.open(bg_file).convert("RGB")
     w, h = img_pil.size
-    max_dim = 500 
-    if w > h:
-        new_w, new_h = max_dim, int(h * (max_dim / w))
-    else:
-        new_w, new_h = int(w * (max_dim / h)), max_dim
+    max_dim = 450 # Ještě menší pro absolutní jistotu
+    new_w, new_h = (max_dim, int(h * (max_dim / w))) if w > h else (int(w * (max_dim / h)), max_dim)
     img_res = img_pil.resize((new_w, new_h))
 
-    # FIX: Převedeme fotku na pole, aby nebylo bílo
-    bg_array = np.array(img_res)
+    st.write("### 🖍️ 3. Zamaluj plochu:")
 
-    st.markdown("---")
-    st.write("### 🖍️ 3. Zamaluj plochu pro změnu:")
-
+    # FIX: Používáme statické pozadí přes parametr background_image
     canvas_result = st_canvas(
         fill_color="rgba(0, 200, 83, 0.3)",
         stroke_width=10,
-        background_image=Image.fromarray(bg_array),
+        background_image=img_res,
         height=new_h,
         width=new_w,
         drawing_mode="freedraw",
-        key=f"canvas_array_fix_{bg_file.name}", 
+        update_streamlit=True,
+        key=f"canvas_safe_{bg_file.name}", 
     )
 
     if st.button("🚀 SPUSTIT VIZUALIZACI", use_container_width=True):
