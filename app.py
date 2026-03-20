@@ -1,4 +1,16 @@
 import streamlit as st
+
+# --- TADY JE TEN OPRAVNÝ PODFUK (Monkey Patch) ---
+# Tato část opravuje chybu "module 'streamlit.elements.image' has no attribute 'image_to_url'"
+import streamlit.elements.image as st_image
+if not hasattr(st_image, 'image_to_url'):
+    def image_to_url(data, width, height, clamp, channels, output_format, image_id):
+        import streamlit.runtime.media_file_storage as mfs
+        return st.runtime.media_file_storage.get_instance().add(data, output_format, image_id)
+    st_image.image_to_url = image_to_url
+# ------------------------------------------------
+
+import replicate
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import io
@@ -6,7 +18,7 @@ import requests
 import base64
 import time
 
-# --- DESIGN (Světlý profi styl) ---
+# --- DESIGN ---
 st.set_page_config(page_title="Vizualka.cz Pro", layout="centered")
 st.markdown("""
     <style>
@@ -19,19 +31,14 @@ st.markdown("""
 
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN (Z Secrets nebo pole) ---
+# --- TOKEN (Ze Secrets) ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token (r8_...):", type="password")
 
-# --- SIDEBAR PRO VZOR ---
 with st.sidebar:
     st.header("🎨 Váš vzor")
     texture_file = st.file_uploader("Nahrajte vzor (omítka/dřevo):", type=["jpg", "png", "jpeg"])
-    if texture_file:
-        st.image(texture_file, caption="Vybraný vzor", use_container_width=True)
-    st.markdown("---")
     watermark_text = st.text_input("Vodoznak:", "Vizualka.cz")
 
-# --- HLAVNÍ NAHRÁVÁNÍ DOMU ---
 bg_file = st.file_uploader("📸 1. Nahrajte fotku domu:", type=["jpg", "png", "jpeg"])
 
 if bg_file:
@@ -49,18 +56,17 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="vizualka_vFinal_vzor",
+        key="vizualka_v2026_final",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
         if not api_token:
-            st.error("⚠️ Chybí Token v nastavení!")
+            st.error("Chybí Token!")
         elif not texture_file:
-            st.error("⚠️ Nejdřív nahrajte vzor v levém menu!")
+            st.error("Nahrajte vzor vlevo!")
         elif canvas_result.image_data is not None:
-            with st.spinner("🤖 AI nanáší váš vzor na dům..."):
+            with st.spinner("🤖 AI pracuje..."):
                 try:
-                    # Funkce pro převod na Base64
                     def pil_to_b64(pil_img):
                         buf = io.BytesIO()
                         pil_img.save(buf, format="PNG")
@@ -69,24 +75,20 @@ if bg_file:
                     mask_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                     text_img = Image.open(texture_file).convert("RGB")
                     
-                    # API volání Replicate
                     headers = {"Authorization": f"Token {api_token}", "Content-Type": "application/json"}
                     payload = {
                         "version": "95b7223184cc756c70b992010d24213030ca5734e1d4d627a061fac313f81537",
                         "input": {
                             "image": pil_to_b64(img_res),
                             "mask": pil_to_b64(mask_img),
-                            # Do promptu napíšeme, aby AI použila texturu
-                            "prompt": "Apply the style and texture from the reference image to the masked area, architectural photorealistic facade",
-                            "image_reference": pil_to_b64(text_img), # Tady posíláme ten tvůj vzor
-                            "num_outputs": 1
+                            "prompt": "Professional architectural visualization, apply texture to facade, realistic daylight, 8k",
+                            "image_reference": pil_to_b64(text_img),
                         }
                     }
 
                     resp = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload)
                     prediction = resp.json()
                     
-                    # Čekání na výsledek
                     poll_url = prediction["urls"]["get"]
                     while prediction["status"] not in ["succeeded", "failed"]:
                         time.sleep(2)
@@ -96,8 +98,5 @@ if bg_file:
                         st.subheader("✨ Výsledek:")
                         st.image(prediction["output"][0], use_container_width=True)
                         st.success("Hotovo! 🔥")
-                    else:
-                        st.error("AI se nepodařilo obrázek vytvořit.")
-
                 except Exception as e:
-                    st.error(f"Něco se pokazilo: {e}")
+                    st.error(f"Chyba: {e}")
