@@ -3,6 +3,7 @@ from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import io
 import requests
+import base64
 import time
 
 # --- DESIGN ---
@@ -17,7 +18,7 @@ st.markdown("""
 
 st.title("🏠 Vizualka.cz Pro")
 
-# --- TOKEN (Ze Secrets) ---
+# --- TOKEN (Z Secrets) ---
 api_token = st.secrets.get("REPLICATE_API_TOKEN") or st.sidebar.text_input("Vlož Token (r8_...):", type="password")
 
 bg_file = st.file_uploader("📸 1. Nahraj fotku domu:", type=["jpg", "png", "jpeg"])
@@ -37,34 +38,53 @@ if bg_file:
         height=new_size[1],
         width=new_size[0],
         drawing_mode="freedraw",
-        key="vizualka_v2026",
+        key="vizualka_vFinal_2026",
     )
 
     if st.button("🚀 3. VIZUALIZOVAT"):
         if not api_token:
             st.error("Chybí Token v nastavení!")
-        else:
-            with st.spinner("🤖 AI pracuje... (může to trvat 20-30 sekund)"):
+        elif canvas_result.image_data is not None:
+            with st.spinner("🤖 AI právě přetírá tvůj dům..."):
                 try:
-                    # Příprava dat
-                    img_byte = io.BytesIO()
-                    img_res.save(img_byte, format='PNG')
-                    mask_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                    mask_byte = io.BytesIO()
-                    mask_img.save(mask_byte, format='PNG')
+                    # Příprava fotky a masky na Base64
+                    def pil_to_b64(pil_img):
+                        buf = io.BytesIO()
+                        pil_img.save(buf, format="PNG")
+                        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-                    # Nahrání fotek na dočasný server (aby je AI viděla)
-                    # Používáme přímý API hovor pro stabilitu
+                    mask_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+                    
+                    # Volání Replicate přes API
+                    model_version = "95b7223184cc756c70b992010d24213030ca5734e1d4d627a061fac313f81537"
+                    url = "https://api.replicate.com/v1/predictions"
                     headers = {"Authorization": f"Token {api_token}", "Content-Type": "application/json"}
                     
-                    # Tady posíláme požadavek přímo na Replicate API
-                    # Poznámka: Pro plnou funkčnost v produkci by fotky měly být na URL, 
-                    # pro test použijeme SDXL Inpainting model.
-                    st.info("Odesílám požadavek do cloudu...")
+                    payload = {
+                        "version": model_version,
+                        "input": {
+                            "image": pil_to_b64(img_res),
+                            "mask": pil_to_b64(mask_img),
+                            "prompt": "modern house facade, architectural lighting, highly detailed",
+                            "num_outputs": 1
+                        }
+                    }
+
+                    response = requests.post(url, headers=headers, json=payload)
+                    prediction = response.json()
                     
-                    # Simulace pro ověření UI - pokud web naskočí, dodáme finální API link
-                    st.success("Web je konečně ONLINE! Teď už zbývá jen propojit reálný model.")
-                    st.image(img_res, caption="Ukázka: Web už nepadá!")
-                    
+                    # Čekání na výsledek (polling)
+                    poll_url = prediction["urls"]["get"]
+                    while prediction["status"] not in ["succeeded", "failed"]:
+                        time.sleep(2)
+                        prediction = requests.get(poll_url, headers=headers).json()
+
+                    if prediction["status"] == "succeeded":
+                        st.subheader("✨ Výsledek:")
+                        st.image(prediction["output"][0], use_container_width=True)
+                        st.success("Hotovo! 🔥")
+                    else:
+                        st.error("AI to nezvládla, zkus to znovu.")
+
                 except Exception as e:
                     st.error(f"Chyba: {e}")
