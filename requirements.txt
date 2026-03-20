@@ -3,3 +3,4 @@ replicate
 Pillow
 requests
 streamlit-drawable-canvas
+pydantic<2
